@@ -514,20 +514,15 @@ static int dupecheck(struct pbuf_t *pb)
 	// pb->flags |= F_DUPE; /* this is a duplicate! */
 
 	int i;
-	int addrlen;  // length of the address part
-	int datalen;  // length of the payload
+	int datalen;  // length of the packet
 	uint32_t hash, idx;
-	const char *addr;
 	const char *data;
 	struct dupe_record_t **dpp, *dp;
 	time_t expiretime = tick -  dupefilter_storetime;
 
 	// 1) collect canonic rep of the packet
-	addr    = pb->data;
-	addrlen = pb->dstcall_end_or_ssid - addr;
-
-	data    = pb->info_start;
-	datalen = pb->packet_len - (data - pb->data) - 2; // ignore CRLF: -2
+	data    = pb->data;
+	datalen = pb->packet_len - 2; // ignore CRLF: -2
 
 	/* TODO:
 	 * Do duplicate checking on an unmodified packet
@@ -542,10 +537,9 @@ static int dupecheck(struct pbuf_t *pb)
 	
 	// there are no 3rd-party frames in APRS-IS ...
 
-	// 2) calculate checksum (from disjoint memory areas)
+	// 2) calculate checksum
 
-	hash = keyhash(addr, addrlen, 0);
-	hash = keyhash(data, datalen, hash);
+	hash = keyhash(data, datalen, 0);
 	idx  = hash;
 
 	// 3) lookup if same checksum is in some hash bucket chain
@@ -560,9 +554,8 @@ static int dupecheck(struct pbuf_t *pb)
 		if (dp->hash == hash &&
 		    dp->t >= expiretime) {
 			// HASH match!  And not too old!
-			if (dp->len == addrlen + datalen &&
-			    memcmp(addr, dp->packet, addrlen) == 0 &&
-			    memcmp(data, dp->packet + addrlen, datalen) == 0) {
+			if (dp->len == datalen &&
+			    memcmp(data, dp->packet, datalen) == 0) {
 				// PACKET MATCH!
 				//hlog(LOG_DEBUG, "Dupe: %.*s", pb->packet_len - 2, pb->data);
 				//hlog(LOG_DEBUG, "Orig: %.*s %.*s", addrlen, dp->addresses, datalen, dp->packet);
@@ -579,11 +572,11 @@ static int dupecheck(struct pbuf_t *pb)
 	// dpp points to pointer at the tail of the chain
 	
 	// 4) Add comparison copy of non-dupe into dupe-db
-	if (dupecheck_append(dpp, hash, addrlen, addr, datalen, data) == -1)
+	if (dupecheck_append(dpp, hash, 0, data, datalen, data) == -1)
 		return -1;
 	
 	// 5) mangle packet in a few common ways, and store to dupe-db
-	dupecheck_mangle_store(addr, addrlen, data, datalen);
+	dupecheck_mangle_store(data, 0, data, datalen);
 	
 	return 0;
 }
